@@ -8,10 +8,22 @@ import 'dart:typed_data';
 import 'BinaryReader.dart';
 import 'Palette.dart';
 
+const planetTypes = const ['', 'desert', 'snow', '', 'forest', 'swamp'];
+
+class MapInfo {
+  int type;
+  int x;
+  int y;
+  int arg;
+}
+
 class Zone {
   int _width;
   int _height;
+  int _flags;
+  String _planet;
   List<List<Tile>> tiles;
+  List<MapInfo> mapInfos;
   
   Zone(int width, int height) {
     _width = width;
@@ -20,6 +32,7 @@ class Zone {
     tiles[0] = new List(width * height);
     tiles[1] = new List(width * height);
     tiles[2] = new List(width * height);
+    mapInfos = new List();
   }
 
   draw(CanvasRenderingContext2D canvas2D) {
@@ -95,7 +108,7 @@ class Game {
           break;
         case 'STUP':
           int length = reader.getUint32();
-          setupScreen = reader.getBuffer(length).asUint8List();
+          setupScreen = reader.getByteArray(length);
           break;
         case 'VERS':
           version = reader.getInt32();
@@ -116,7 +129,7 @@ class Game {
             int headPos = reader.pos;
             int z1 = reader.getUint16();
             assert([1, 2, 3, 5].contains(z1));
-            int zoneLength = reader.getUint32();
+            int zoneLength = reader.getUint32(); // asserted later
             int zoneId = reader.getUint16();
             assert(zoneId == i);
 
@@ -127,20 +140,19 @@ class Game {
             int height = reader.getUint16();
             assert(width * height * 6 + 20 == size);
             
-            int flags = reader.getUint8();
+            Zone z = new Zone(width, height);
+            z._flags = reader.getUint8();
             
             int tmp = reader.getUint32();
             assert(tmp == 0xFF000000);
             tmp = reader.getUint8();
             assert(tmp == 255);
             
-            int planet = reader.getUint8();
-            assert([1, 2, 3, 5].contains(planet));
+            z._planet = planetTypes[reader.getUint8()];
             
             tmp = reader.getUint8();
             assert(tmp == 0);
             
-            Zone z = new Zone(width, height);
             for (int j = 0; j < height; j++) {
               for (int k = 0; k < width; k++) {
                 for (int t = 0; t < 3; t++) {
@@ -151,14 +163,14 @@ class Game {
             }
             zones.add(z);
 
-            int count2 = reader.getUint16();
-            for (int j = 0; j < count2; j++) {
-              int type = reader.getUint32();
-              assert(type < 16);
-              for (int t = 0; t < 3; t++) {
-                int u = reader.getUint16();
-              }
-              tmp = reader.getUint16();
+            int mapInfoCount = reader.getUint16();
+            for (int j = 0; j < mapInfoCount; j++) {
+              MapInfo mapInfo = new MapInfo();
+              mapInfo.type = reader.getUint32();
+              mapInfo.x = reader.getUint16();
+              mapInfo.y = reader.getUint16();
+              mapInfo.arg = reader.getUint32();
+              z.mapInfos.add(mapInfo);
             }
 
             tag = reader.getTag();

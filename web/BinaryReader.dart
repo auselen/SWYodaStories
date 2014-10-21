@@ -11,10 +11,10 @@ class BinaryReader {
   
   get pos => _pos;
   
-  ByteBuffer getBuffer(int length) {
-    ByteBuffer v = data.buffer.asInt32List(_pos, length).buffer;
+  Uint8List getByteArray(int length) {
+    Uint8List a = data.buffer.asUint8List(_pos, length);
     _pos += length;
-    return v;
+    return a;
   }
   
   String getTag() {
