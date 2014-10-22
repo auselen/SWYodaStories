@@ -9,6 +9,7 @@ import 'BinaryReader.dart';
 import 'Palette.dart';
 
 const planetTypes = const ['', 'desert', 'snow', '', 'forest', 'swamp'];
+const planetColors = const['', 'LightYellow', 'LightBlue', '', 'DarkOliveGreen', 'DarkOliveGreen'];
 
 class MapInfo {
   int type;
@@ -18,10 +19,11 @@ class MapInfo {
 }
 
 class Zone {
+  int _id;
   int _width;
   int _height;
   int _flags;
-  String _planet;
+  int _planet;
   List<List<Tile>> tiles;
   List<MapInfo> mapInfos;
   
@@ -35,6 +37,11 @@ class Zone {
     mapInfos = new List();
   }
 
+  drawHint(CanvasRenderingContext2D canvas2D, MapInfo mapInfo) {
+    canvas2D.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    canvas2D.fillRect(mapInfo.x * 32, mapInfo.y * 32, 32, 32);
+  }
+  
   draw(CanvasRenderingContext2D canvas2D) {
     for (int y = 0; y < _height; y++) {
       for (int x = 0; x < _width; x++) {
@@ -45,6 +52,7 @@ class Zone {
         }
       }
     }
+    mapInfos.forEach((e) => drawHint(canvas2D, e));
   }
 }
 
@@ -86,10 +94,12 @@ class Game {
   List<Zone> zones;
   Uint8List setupScreen;
   
+  CanvasElement canvas;
   CanvasRenderingContext2D canvas2D;
 
-  Game(CanvasRenderingContext2D canvas2D, ByteData data) {
-    this.canvas2D = canvas2D;
+  Game(CanvasElement canvas, ByteData data) {
+    this.canvas = canvas;
+    this.canvas2D = canvas.context2D;
     canvas2D.setFillColorRgb(255, 0, 0);
     reader = new BinaryReader(data);
     tiles = new List();
@@ -141,6 +151,7 @@ class Game {
             assert(width * height * 6 + 20 == size);
             
             Zone z = new Zone(width, height);
+            z._id = zoneId;
             z._flags = reader.getUint8();
             
             int tmp = reader.getUint32();
@@ -148,7 +159,7 @@ class Game {
             tmp = reader.getUint8();
             assert(tmp == 255);
             
-            z._planet = planetTypes[reader.getUint8()];
+            z._planet = reader.getUint8();
             
             tmp = reader.getUint8();
             assert(tmp == 0);
@@ -293,6 +304,8 @@ class Game {
   }
   
   drawZone(int z) {
+    document.body.style.backgroundColor = planetColors[zones[z]._planet];
+    canvas2D.clearRect(0, 0, canvas.width, canvas.height);
     zones[z].draw(canvas2D);
   }
   
@@ -308,12 +321,17 @@ Game game;
 
 void main() {
   HttpRequest.request('YODESK.DTA', responseType: 'arraybuffer').then((HttpRequest req) {
-    game = new Game((querySelector("#canvas") as CanvasElement).context2D, 
+    game = new Game((querySelector("#canvas") as CanvasElement), 
         new ByteData.view(req.response));
     //game.drawSetup();
     //game.paintTile(5, 5, 1024, blend: true);
     game.drawZone(277);
     game.status();
+    SelectElement zones = querySelector("#zones") as SelectElement;
+    game.zones.forEach((e) => zones.children.add(
+        new OptionElement(value: e._id.toString(), data: e._id.toString())));
+    zones.onChange.listen((e) =>
+        game.drawZone(int.parse(zones.selectedOptions.first.value)));
     print("Everything is OK");
   });
 }
