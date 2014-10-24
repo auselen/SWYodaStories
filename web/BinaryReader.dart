@@ -12,6 +12,8 @@ class BinaryReader {
   get pos => _pos;
   
   Uint8List getByteArray(int length) {
+    if (length == 0)
+      return null;
     Uint8List a = data.buffer.asUint8List(_pos, length);
     _pos += length;
     return a;

@@ -8,8 +8,12 @@ import 'dart:typed_data';
 import 'BinaryReader.dart';
 import 'Palette.dart';
 
+var debugGame = false;
+
 const planetTypes = const ['', 'desert', 'snow', '', 'forest', 'swamp'];
 const planetColors = const['', 'LightYellow', 'LightBlue', '', 'DarkOliveGreen', 'DarkOliveGreen'];
+
+Map<int, String> tileNames;
 
 class MapInfo {
   int type;
@@ -27,6 +31,12 @@ class Zone {
   List<List<Tile>> tiles;
   List<MapInfo> mapInfos;
   
+  int _izax_unknown1;
+  int _izax_unknown2;
+  Uint8List _izax_buffer;
+  Uint8List _izax_buffer2;
+  Uint8List _izax_buffer3;
+  
   Zone(int width, int height) {
     _width = width;
     _height = height;
@@ -40,6 +50,11 @@ class Zone {
   drawHint(CanvasRenderingContext2D canvas2D, MapInfo mapInfo) {
     canvas2D.fillStyle = 'rgba(255, 255, 255, 0.5)';
     canvas2D.fillRect(mapInfo.x * 32, mapInfo.y * 32, 32, 32);
+    canvas2D.font = "16pt Courrier";
+    canvas2D.fillStyle = 'rgba(0, 0, 0, 1)';
+    canvas2D.fillText(mapInfo.type.toRadixString(16).toUpperCase(),
+        mapInfo.x *32 + 8, mapInfo.y * 32 + 24);
+    print(mapInfo.type.toRadixString(16) + " " + mapInfo.arg.toString() + " " + mapInfo.x.toString() + "," + mapInfo.y.toString());
   }
   
   draw(CanvasRenderingContext2D canvas2D) {
@@ -47,16 +62,32 @@ class Zone {
       for (int x = 0; x < _width; x++) {
         for (int l = 0; l < 3; l++) {
           Tile tile = tiles[l][x + y * _width];
-          if (tile != null)
+          if (tile != null) {
             tile.paint(canvas2D, x, y, blend: l > 0);
+            if (debugGame)
+              if (tileNames[tile._id] != null)
+                print("drawn tile #" + tile._id.toString() +
+                    " " + tileNames[tile._id] +
+                    " x:" + x.toString() + " y:" + y.toString());
+          }
         }
       }
     }
-    mapInfos.forEach((e) => drawHint(canvas2D, e));
+    if (debugGame) {
+      print("zone  :" + _id.toString());
+      print("flags :" + _flags.toString());
+      print("izax1 :" + _izax_unknown1.toString());
+      print("izax2 :" + _izax_unknown2.toString());
+      print(_izax_buffer);
+      print(_izax_buffer2);
+      print(_izax_buffer3);
+      mapInfos.forEach((e) => drawHint(canvas2D, e));
+    }
   }
 }
 
 class Tile {
+  int _id;
   Uint32List _data;
   Uint8List _data8;
   int flags;
@@ -64,7 +95,8 @@ class Tile {
   static final CanvasRenderingContext2D _tempContext2D = _tempCanvas.context2D;
   static final ImageData _imageData = _tempContext2D.createImageData(32, 32);
   
-  Tile(BinaryReader reader) {
+  Tile(int id, BinaryReader reader) {
+    _id = id;
     _data = new Uint32List(32 * 32);
     flags = reader.getUint32();
     for (int j = 0; j < 0x400; j++) {
@@ -89,10 +121,10 @@ class Game {
   BinaryReader reader;
   int version;
   List<Tile> tiles;
-  List<String> tileNames;
   List<String> sounds;
   List<Zone> zones;
   Uint8List setupScreen;
+  List<String> ipuz;
   
   CanvasElement canvas;
   CanvasRenderingContext2D canvas2D;
@@ -103,9 +135,10 @@ class Game {
     canvas2D.setFillColorRgb(255, 0, 0);
     reader = new BinaryReader(data);
     tiles = new List();
-    tileNames = new List();
+    tileNames = new Map();
     sounds = new List();
     zones = new List();
+    ipuz = new List();
     init();
   }
 
@@ -113,6 +146,7 @@ class Game {
     String section;
     while (section != 'ENDF') {
       section = reader.getTag();
+      print("Processing section: " + section);
       switch (section) {
         case 'ENDF':
           break;
@@ -137,7 +171,7 @@ class Game {
           var count = reader.getUint16();
           for (int i = 0; i < count; i++) {
             int headPos = reader.pos;
-            int z1 = reader.getUint16();
+            int z1 = reader.getUint16(); // same as planet
             assert([1, 2, 3, 5].contains(z1));
             int zoneLength = reader.getUint32(); // asserted later
             int zoneId = reader.getUint16();
@@ -154,15 +188,16 @@ class Game {
             z._id = zoneId;
             z._flags = reader.getUint8();
             
-            int tmp = reader.getUint32();
-            assert(tmp == 0xFF000000);
-            tmp = reader.getUint8();
-            assert(tmp == 255);
+            int constant = reader.getUint32();
+            assert(constant == 0xFF000000);
+            constant = reader.getUint8();
+            assert(constant == 255);
             
             z._planet = reader.getUint8();
+            assert(z._planet == z1);
             
-            tmp = reader.getUint8();
-            assert(tmp == 0);
+            constant = reader.getUint8();
+            assert(constant == 0);
             
             for (int j = 0; j < height; j++) {
               for (int k = 0; k < width; k++) {
@@ -180,32 +215,34 @@ class Game {
               mapInfo.type = reader.getUint32();
               mapInfo.x = reader.getUint16();
               mapInfo.y = reader.getUint16();
-              mapInfo.arg = reader.getUint32();
+              constant = reader.getUint16();
+              assert(constant == 0x01);
+              mapInfo.arg = reader.getUint16();
               z.mapInfos.add(mapInfo);
             }
 
             tag = reader.getTag();
             assert(tag == "IZAX");
-            tmp = reader.getUint32();
+            int tmp = reader.getUint32();
+            z._izax_unknown1 = tmp;
             assert(tmp >= 16 && tmp <= 1124);
             tmp = reader.getUint16();
+            z._izax_unknown2 = tmp;
             assert(tmp == 0 || tmp == 1);
 
             int izaxCount1 = reader.getUint16();
-            for (int j = 0; j < izaxCount1; j++) {
-              reader.skip(44);
-            }
+            z._izax_buffer = reader.getByteArray(44 * izaxCount1);
             
             int izaxCount2 = reader.getUint16();
             assert([0, 1, 2, 4, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
                     16, 17, 18, 19, 20, 21, 23, 24, 26, 27, 28, 29, 30, 31, 32,
                     33, 34, 36, 38, 40, 43,44, 45, 46, 47, 50, 51, 53, 54,
                     61, 64, 70, 71].contains(izaxCount2));
-            reader.skip(2 * izaxCount2);
+            z._izax_buffer2 = reader.getByteArray(2 * izaxCount2);
             
             int izaxCount3 = reader.getUint16();
             assert([0, 1, 2, 3].contains(izaxCount3));
-            reader.skip(2 * izaxCount3);
+            z._izax_buffer3 = reader.getByteArray(2 * izaxCount3);
 
             tag = reader.getTag();
             assert(tag == "IZX2");
@@ -263,20 +300,51 @@ class Game {
               break;
             String name = reader.getString(24);
             //print(id.toString() + " " + name);
-            tileNames.add(name);
+            tileNames[id] = name;
           }
           assert(tileNames.length == (sectionLength - 2) / 26);
           break;
         case 'TILE':
           int tileSectionLength = reader.getUint32();
           for (int i = 0; i < tileSectionLength / 0x404; i++) {        
-            tiles.add(new Tile(reader));
+            tiles.add(new Tile(i, reader));
+          }
+          break;
+        case 'PUZ2':
+          int puz2SectionLength = reader.getUint32();
+          int puz2Pos = reader.pos;
+          int tmp = reader.getInt16();
+          assert(tmp == 0);
+          int ipuzCount = 0;
+          while (reader.pos < (puz2Pos + puz2SectionLength)) {
+            ipuzCount++;
+            int pos = reader.pos;
+            String tag = reader.getTag();
+            assert(tag == "IPUZ");
+            int ipuzLen = reader.getUint32();
+            tmp = reader.getUint32();
+            tmp = reader.getUint32();
+            tmp = reader.getUint32();
+            int unknown = reader.getUint16();
+            while (reader.pos < (ipuzLen + pos)) {
+              int textlen = reader.getUint16();
+              if (textlen == 0) {
+                continue;
+              }
+              String text = reader.getString(textlen);
+              ipuz.add(text);
+            }
+            if (unknown  == 0)
+              reader.skip(0x8);
+            else 
+              reader.skip(0xa);
           }
           break;
         default:
+          int pos = reader.pos;
           int size = reader.getUint32();
           reader.skip(size);
-          print("Unhandled section: " + section + " size: " + size.toString());
+          print("Unhandled section: " + section + " start: 0x" + pos.toRadixString(16) + " size: " + size.toString());
       }
     }
   }
@@ -325,13 +393,21 @@ void main() {
         new ByteData.view(req.response));
     //game.drawSetup();
     //game.paintTile(5, 5, 1024, blend: true);
-    game.drawZone(277);
+    game.drawZone(0);
     game.status();
     SelectElement zones = querySelector("#zones") as SelectElement;
     game.zones.forEach((e) => zones.children.add(
         new OptionElement(value: e._id.toString(), data: e._id.toString())));
     zones.onChange.listen((e) =>
         game.drawZone(int.parse(zones.selectedOptions.first.value)));
+    CheckboxInputElement debug = querySelector("#debugGame") as CheckboxInputElement;
+    if (debug == null)
+      print("debug is null");
+    else
+    debug.onChange.listen((e) {
+      debugGame = debug.checked;
+      game.drawZone(int.parse(zones.selectedOptions.first.value));
+    });
     print("Everything is OK");
   });
 }
