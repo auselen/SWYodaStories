@@ -340,6 +340,19 @@ class Game {
               reader.skip(0xa);
           }
           break;
+        case 'CHAR':
+          int charLen = reader.getUint32();
+          int charPos = reader.pos;
+          int tmp = reader.getUint16();
+          assert(tmp == 0);
+          while (reader.pos < (charPos + charLen)) {
+            String tag = reader.getTag();
+            assert(tag == 'ICHA');
+            int len = reader.getInt32();
+            reader.skip(len);
+            int unknown = reader.getUint16();
+          }
+          break;
         default:
           int pos = reader.pos;
           int size = reader.getUint32();
