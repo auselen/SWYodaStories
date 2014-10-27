@@ -24,6 +24,19 @@ class BinaryReader {
                       data.getInt8(_pos++), data.getInt8(_pos++)]);
   }
   
+  String getCString() {
+    int p = 0;
+    while (data.getUint8(pos + p) != 0) p++;
+    String str = ASCII.decode(data.buffer.asInt8List(_pos, p));
+    _pos += p + 1;
+    return str;
+  }
+  
+  expectTag(String tag) {
+    if (getTag() != tag)
+      throw new StateError(tag + " didn't match");
+  }
+  
   int getInt32() {
     int v = data.getInt32(_pos, Endianness.LITTLE_ENDIAN);
     _pos += 4;
